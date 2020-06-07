@@ -37,6 +37,9 @@
     static char* check_type(char* name, int ScopeLevel);
     static int check_IDENT_exist(char* LeftOp, char* RightOp);
     int HAS_ERROR = 0;
+    int LoadPos = 0;
+    char *LoadType;
+    int LabelNo = 0;
 %}
 
 %error-verbose
@@ -161,6 +164,8 @@ MulExpression
         		}
 		}
 	}
+        fprintf(fp,"\t%c",LeftOp[0]);
+        fprintf(fp,"%s\n",$2);
         printf("%s\n",$2);
     }
 	
@@ -184,16 +189,6 @@ AddExpression
 	}
 	fprintf(fp,"\t%c",LeftOp[0]);
 	fprintf(fp,"%s\n",$2);
-	/*
-	if(strcmp(LeftOp,"int32") == 0)
-	{
-		fprintf(fp,"\ti%s\n",$2);
-	}
-	else if(strcmp(LeftOp,"float32") == 0)
-	{
-		fprintf(fp,"\tf%s\n",$2);
-	}
-	*/
         printf("%s\n",$2);
 
     }
@@ -216,6 +211,15 @@ CmpExpression
                 }
         }
 	$$ = "bool";
+	if(strcmp(LeftOp,"int32") == 0)
+	{
+		fprintf(fp,"\tisub\n");
+	}
+	else if(strcmp(LeftOp,"float32") == 0)
+	{
+		fprintf(fp,"\tfcmpl\n");
+	}
+	fprintf(fp,"\t%s Label_%d\n",$2,LabelNo);
         printf("%s\n",$2);
     }
 ;
@@ -247,6 +251,7 @@ LandExpression
 			$$ = "bool";
 		}
 	}
+	fprintf(fp,"\t%s\n",$2);
         printf("%s\n",$2);
     }
 ;
@@ -278,6 +283,7 @@ LorExpression
                 	$$ = "bool";
         	}
 	}
+        fprintf(fp,"\t%s\n",$2);
         printf("%s\n",$2);
 
     }
@@ -286,7 +292,18 @@ LorExpression
 
 UnaryExpr
     : PrimaryExpr
-    | unary_op UnaryExpr	{ printf("%s\n",$1); $$ = $2; }
+    | unary_op UnaryExpr{ 
+	printf("%s\n",$1); 
+	$$ = $2;
+	if(strcmp($1,"neg") == 0)
+	{
+		fprintf(fp,"\t%c%s\n",$2[0],$1);
+	}
+	if(strcmp($1,"ixor") == 0)
+	{
+		fprintf(fp,"\t%s\n",$1);	
+	}
+    }
 ;
 
 PrimaryExpr
@@ -414,9 +431,29 @@ ExpressionStmt
 IncDecStmt
     : Expression INC{
 	printf("INC\n");
+        if(LoadType[0] == 'i')
+        {
+                fprintf(fp,"\tldc 1\n");
+        }
+        else
+        {
+                fprintf(fp,"\tldc 1.0\n");
+        }
+	fprintf(fp,"\t%cadd\n"
+		   "\t%cstore %d\n",LoadType[0],LoadType[0],LoadPos);
     }
     | Expression DEC{
 	printf("DEC\n");
+	if(LoadType[0] == 'i')
+        {
+		fprintf(fp,"\tldc 1\n");
+	}
+	else
+	{
+		fprintf(fp,"\tldc 1.0\n");
+	}
+        fprintf(fp,"\t%csub\n"
+		   "\t%cstore %d\n",LoadType[0],LoadType[0],LoadPos);
     }
 ;
 
@@ -458,8 +495,77 @@ PostStmt
 ;
 
 PrintStmt
-    : PRINT LPAREN Expression RPAREN	{ printf("PRINT %s\n", check_type($3,scope_level)); }
-    | PRINTLN LPAREN Expression RPAREN	{ printf("PRINTLN %s\n", check_type($3,scope_level)); }
+    : PRINT LPAREN Expression RPAREN{
+	char *type_printed;
+	type_printed = check_type($3,scope_level);
+	printf("PRINT %s\n", type_printed);
+        if(strcmp(type_printed,"bool") == 0)
+        {
+                fprintf(fp,"\tifne L_cmp_0\n"
+                           "\tldc \"false\"\n"
+                           "\tgoto Label_%d\n"
+                           "Label_%d:\n",LabelNo,LabelNo);
+		LabelNo++;
+                fprintf(fp,"\tldc \"true\"\n"
+                           "Label_%d:\n",LabelNo);
+		LabelNo++;
+        }
+
+	fprintf(fp,"\tgetstatic java/lang/System/out Ljava/io/PrintStream;\n"
+		   "\tswap\n");
+	if(strcmp(type_printed,"int32") == 0)
+	{
+		fprintf(fp,"\tinvokevirtual java/io/PrintStream/print(I)V\n");
+	}
+	else if(strcmp(type_printed,"float32") == 0)
+	{
+		fprintf(fp,"\tinvokevirtual java/io/PrintStream/print(F)V\n");
+	}
+	else if(strcmp(type_printed,"string") == 0)
+	{
+		fprintf(fp,"\tinvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+	}
+        else if(strcmp(type_printed,"bool") == 0)
+        {
+                fprintf(fp,"\tinvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+        }
+
+    }
+    | PRINTLN LPAREN Expression RPAREN{
+        char *type_printed;
+        type_printed = check_type($3,scope_level);
+        printf("PRINT %s\n", type_printed);
+        if(strcmp(type_printed,"bool") == 0)
+        {
+                fprintf(fp,"\tifne Label_%d\n"
+                           "\tldc \"false\"\n"
+                           "\tgoto Label_%d\n"
+                           "Label_%d:\n",LabelNo,LabelNo,LabelNo);
+		LabelNo++;
+                fprintf(fp,"\tldc \"true\"\n"
+                           "Label_%d:\n",LabelNo);
+		LabelNo++;
+        }
+
+        fprintf(fp,"\tgetstatic java/lang/System/out Ljava/io/PrintStream;\n"
+                   "\tswap\n");
+        if(strcmp(type_printed,"int32") == 0)
+        {
+                fprintf(fp,"\tinvokevirtual java/io/PrintStream/println(I)V\n");
+        }
+        else if(strcmp(type_printed,"float32") == 0)
+        {
+                fprintf(fp,"\tinvokevirtual java/io/PrintStream/println(F)V\n");
+        }
+        else if(strcmp(type_printed,"string") == 0)
+        {
+                fprintf(fp,"\tinvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+        }
+	else if(strcmp(type_printed,"bool") == 0)
+	{
+                fprintf(fp,"\tinvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+	}
+    }
 ;
 
 
@@ -475,20 +581,20 @@ assign_op
 
 
 Land_op
-    : LAND      { $$ = "LAND"; }
+    : LAND      { $$ = "iand"; }
 ;
 
 Lor_op
-    : LOR       { $$ = "LOR"; }
+    : LOR       { $$ = "ior"; }
 ;
 
 cmp_op
-    : EQL	{ $$ = "EQL"; }
-    | NEQ	{ $$ = "NEQ"; }
-    | LSS	{ $$ = "LSS"; }
-    | LEQ	{ $$ = "LEQ"; }
-    | GTR	{ $$ = "GTR"; }
-    | GEQ	{ $$ = "GEQ"; }
+    : EQL	{ $$ = "ifeq"; }
+    | NEQ	{ $$ = "ifne"; }
+    | LSS	{ $$ = "iflt"; }
+    | LEQ	{ $$ = "ifle"; }
+    | GTR	{ $$ = "ifgt"; }
+    | GEQ	{ $$ = "ifge"; }
 ;
 
 
@@ -504,9 +610,9 @@ mul_op
 ;
 
 unary_op
-    : ADD	{ $$ = ""; }
+    : ADD	{ $$ = "pos"; }
     | SUB	{ $$ = "neg"; }
-    | NOT	{ $$ = "NOT"; }
+    | NOT	{ $$ = "ixor"; fprintf(fp,"\ticonst_1\n"); }
 ;
 
 %%
@@ -578,6 +684,8 @@ static void lookup_symbol(char* name, int ScopeLevel) {
 			printf("IDENT (name=%s, address=%d)\n",ST[j]->Name[i],ST[j]->Address[i]);
 			fprintf(fp,"\t%c",ST[j]->Type[i][0]);
 			fprintf(fp,"load %d\n",ST[j]->Address[i]);
+			LoadPos = ST[j]->Address[i];
+			LoadType = ST[j]->Type[i];
 			return;
 		}
    	}
