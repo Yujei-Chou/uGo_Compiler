@@ -45,13 +45,13 @@
     static void load(int LoadPos,char* LoadType, char* LoadElementType);
     static void store(int StorePos,char* StoreType, char* StoreElementType);	
     int HAS_ERROR = 0;
-    int LoadPos = 0;
-    char *LoadType;
     int LabelNo = 0;
-    int PrintNum = 1;
-    char* LHS="";
-    int IfAssign = 0;
-    int ConvertType=0;
+    int LabelIfFalseNo = 0;
+    int LabelIfExitNo = 0;
+    int LabelForBeginNo = 0;
+    int LabelForExitNo = 0;
+
+
 %}
 
 %error-verbose
@@ -90,7 +90,7 @@
 %type <s_val> STRING
 %type <s_val> BOOL
 %type <s_val> TypeName ArrayType Type assign_op add_op mul_op cmp_op unary_op Land_op Lor_op Expression
-%type <s_val> Literal UnaryExpr PrimaryExpr IndexExpr Operand ConversionExpr MulExpression AddExpression CmpExpression LandExpression LorExpression Expression_test
+%type <s_val> Literal UnaryExpr PrimaryExpr IndexExpr Operand ConversionExpr MulExpression AddExpression CmpExpression LandExpression LorExpression Expression_LHS
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -151,20 +151,22 @@ MulExpression
         int flag;
         LeftOp = check_type($1,scope_level);
         RightOp = check_type($3,scope_level);
-	flag = check_IDENT_exist($1, $3);
+	flag = check_IDENT_exist(LeftOp, RightOp);
         if(flag == 1)
 	{
-		if(strcmp($2, "REM") == 0)
+		if(strcmp($2, "rem") == 0)
 		{
 			if(strcmp(LeftOp, "int32") != 0 || strcmp(RightOp, "int32") != 0)
 			{
 				if(strcmp(LeftOp, "int32") != 0)
 				{
 					printf("error:%d: invalid operation: (operator %s not defined on %s)\n",yylineno, $2, LeftOp);
+					HAS_ERROR = 1;
 				}
 				else
 				{
 					printf("error:%d: invalid operation: (operator %s not defined on %s)\n",yylineno, $2, RightOp);
+					HAS_ERROR = 1;
 				}
 			}
 		}
@@ -173,14 +175,14 @@ MulExpression
         		if(strcmp(LeftOp, RightOp) != 0)
         		{
 				printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n",yylineno, $2, LeftOp, RightOp);
+				HAS_ERROR = 1;
         		}
 		}
 	}
 
         fprintf(fp,"\t%c",LeftOp[0]);
         fprintf(fp,"%s\n",$2);
-        printf("%s\n",$2);
-	PrintNum=2;
+        //printf("%s\n",$2);
     }
 	
 ;
@@ -193,19 +195,19 @@ AddExpression
 	int flag;
 	LeftOp = check_type($1,scope_level);
 	RightOp = check_type($3,scope_level);
-	flag = check_IDENT_exist($1, $3);
+	flag = check_IDENT_exist(LeftOp, RightOp);
 	if(flag == 1)
 	{
 		if(strcmp(LeftOp, RightOp) != 0)
 		{
 			printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n",yylineno, $2, LeftOp, RightOp);
+			HAS_ERROR = 1;
 		}
 	}
 
 	fprintf(fp,"\t%c",LeftOp[0]);
 	fprintf(fp,"%s\n",$2);
-        printf("%s\n",$2);
-	PrintNum=2;
+        //printf("%s\n",$2);
     }
 ;
 
@@ -217,12 +219,13 @@ CmpExpression
         int flag;
         LeftOp = check_type($1,scope_level);
         RightOp = check_type($3,scope_level);
-        flag = check_IDENT_exist($1, $3);
+	flag = check_IDENT_exist(LeftOp, RightOp);
         if(flag == 1)
         {	
                 if(strcmp(LeftOp, RightOp) != 0)
                 {
                         printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n",yylineno, $2, LeftOp, RightOp);
+			HAS_ERROR = 1;
                 }
         }
 	$$ = "bool";
@@ -244,8 +247,7 @@ CmpExpression
 		   "\ticonst_1\n"
 		   "Label_%d:\n",j,i,j);
 	LabelNo+=2;
-        printf("%s\n",$2);
-	PrintNum=2;
+        //printf("%s\n",$2);
     }
 ;
 
@@ -257,7 +259,7 @@ LandExpression
 	int flag;
         LeftOp = check_type($1,scope_level);
         RightOp = check_type($3,scope_level);
-	flag = check_IDENT_exist($1, $3);
+	flag = check_IDENT_exist(LeftOp, RightOp);
 	if(flag == 1)
 	{
         	if(strcmp(LeftOp, "bool") != 0 || strcmp(RightOp, "bool") != 0)
@@ -265,10 +267,12 @@ LandExpression
 			if(strcmp(LeftOp, "bool") != 0)
 			{
                 		printf("error:%d: invalid operation: (operator %s not defined on %s)\n",yylineno, $2, LeftOp);
+				HAS_ERROR = 1;
 			}
 			else
 			{
 				printf("error:%d: invalid operation: (operator %s not defined on %s)\n",yylineno, $2, RightOp);
+				HAS_ERROR = 1;
 			}
         	}
 		else
@@ -278,8 +282,7 @@ LandExpression
 	}
 
 	fprintf(fp,"\t%s\n",$2);
-        printf("%s\n",$2);
-	PrintNum=2;
+        //printf("%s\n",$2);
     }
 ;
 
@@ -291,7 +294,7 @@ LorExpression
 	int flag;
         LeftOp = check_type($1,scope_level);
         RightOp = check_type($3,scope_level);
-	flag = check_IDENT_exist($1, $3);
+	flag = check_IDENT_exist(LeftOp, RightOp);
 	if(flag == 1)
 	{
         	if(strcmp(LeftOp, "bool") != 0 || strcmp(RightOp, "bool") != 0)
@@ -299,10 +302,12 @@ LorExpression
                 	if(strcmp(LeftOp, "bool") != 0)
                 	{
                         	printf("error:%d: invalid operation: (operator %s not defined on %s)\n",yylineno, $2, LeftOp);
+				HAS_ERROR = 1;
                 	}
                 	else
                 	{
                         	printf("error:%d: invalid operation: (operator %s not defined on %s)\n",yylineno, $2, RightOp);
+				HAS_ERROR = 1;
                 	}
         	}
         	else
@@ -312,8 +317,7 @@ LorExpression
 	}
 
         fprintf(fp,"\t%s\n",$2);
-        printf("%s\n",$2);
-	PrintNum=2;
+        //printf("%s\n",$2);
 
     }
 ;
@@ -322,7 +326,7 @@ LorExpression
 UnaryExpr
     : PrimaryExpr
     | unary_op UnaryExpr{ 
-	printf("%s\n",$1); 
+	//printf("%s\n",$1); 
 	$$ = $2;
 	if(strcmp($1,"neg") == 0)
 	{
@@ -350,6 +354,7 @@ Operand
 	{
 		fprintf(fp,"\taload %d\n",IDENT_Detail.ScanPos);
 	}
+	
     }
     | LPAREN Expression RPAREN	{ $$ = $2; }
 ;
@@ -358,12 +363,12 @@ Operand
 
 Literal
     : INT_LIT{
-	printf("INT_LIT %d\n",$1);
+	//printf("INT_LIT %d\n",$1);
 	fprintf(fp,"\tldc %d\n",$1);
 	$$ = "int32";
     }
     | FLOAT_LIT{
- 	printf("FLOAT_LIT %f\n",$1);
+ 	//printf("FLOAT_LIT %f\n",$1);
 	fprintf(fp,"\tldc %f\n",$1);
 	$$ = "float32";
     }
@@ -371,26 +376,22 @@ Literal
 	$$ = "bool";
     }
     | QUOTA STRING_LIT QUOTA{
-	printf("STRING_LIT %s\n",$2);
+	//printf("STRING_LIT %s\n",$2);
 	fprintf(fp,"\tldc \"%s\"\n",$2);
 	$$ = "string";
     } 
 ;
 
 BOOL_LIT
-    : TRUE	{ printf("TRUE\n"); fprintf(fp,"\ticonst_1\n"); }
-    | FALSE	{ printf("FALSE\n"); fprintf(fp, "\ticonst_0\n"); }
+    : TRUE	{ /*printf("TRUE\n");*/ fprintf(fp,"\ticonst_1\n"); }
+    | FALSE	{ /*printf("FALSE\n");*/ fprintf(fp, "\ticonst_0\n"); }
 ;
 
 IndexExpr
     : PrimaryExpr LBRACK Expression RBRACK{
-	printf("IfAssign:*%d********\n",IfAssign);
-	if(IfAssign == 1)
-	{
-		Struct IndexExpr_Detail = lookup_symbol($1,scope_level);
-		fprintf(fp,"\t%caload\n",IndexExpr_Detail.ScanElementType[0]);
-		IfAssign = 0;
-	}	
+	Struct IndexExpr_Detail = lookup_symbol($1,scope_level);
+	fprintf(fp,"\t%caload\n",IndexExpr_Detail.ScanElementType[0]);
+
     }
 ;
 
@@ -488,7 +489,7 @@ SimpleStmt
 ;
 
 AssignmentStmt
-    : Expression_test assign_op Expression{
+    : Expression_LHS assign_op Expression{
         char* LeftOp;
         char* RightOp;
 	int flag;
@@ -500,12 +501,14 @@ AssignmentStmt
 		if(strcmp($1,"int32") == 0 || strcmp($1,"float32") == 0 || strcmp($1,"string") == 0 || strcmp($1,"bool") == 0)
 		{
 			printf("error:%d: cannot assign to %s\n",yylineno, $1);
+			HAS_ERROR = 1;
 		}
 		else
 		{
         		if(strcmp(LeftOp,RightOp) != 0)
         		{
                 		printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n",yylineno, $2, LeftOp, RightOp);
+				HAS_ERROR = 1;
         		}
 		}
 	}
@@ -517,24 +520,23 @@ AssignmentStmt
 		fprintf(fp,"\t%c%s\n",IDENT_Detail.ScanType[0],$2);
 	}	
 	store(IDENT_Detail.ScanPos,IDENT_Detail.ScanType,IDENT_Detail.ScanElementType);
+        //printf("%s\n",$2);
 
-        printf("%s\n",$2);
-	PrintNum=1;
 
     }
 ;
 
-Expression_test
+Expression_LHS
     : IDENT{
-	LHS = $1;
         $$ = $1;
-	printf("IDENT:%s\n",$1);
+	//printf("IDENT:%s\n",$1);
     }
-    | IndexExpr{
-	LHS = $1;
+    | PrimaryExpr LBRACK Expression RBRACK{
 	$$ = $1;
-	IfAssign = 1;
-	printf("Index Expr:%s\n",$1);
+	//printf("Index Expr:%s\n",$1);
+    }
+    | Literal{
+	$$ = $1;
     }
 ;
 
@@ -546,7 +548,7 @@ ExpressionStmt
 
 IncDecStmt
     : Expression INC{
-	printf("INC\n");
+	//printf("INC\n");
 	Struct RHS_Detail = lookup_symbol($1,scope_level);
         if(RHS_Detail.ScanType[0] == 'i')
         {
@@ -561,7 +563,7 @@ IncDecStmt
 
     }
     | Expression DEC{
-	printf("DEC\n");
+	//printf("DEC\n");
 	Struct RHS_Detail = lookup_symbol($1,scope_level);
 	if(RHS_Detail.ScanType[0] == 'i')
         {
@@ -582,35 +584,47 @@ Block
 
 
 IfStmt
-    : IF Condition Block
-    | IF Condition Block ELSE IfStmt
-    | IF Condition Block ELSE{ fprintf(fp,"\tgoto L_if_exit\n"); fprintf(fp,"L_if_false:\n"); } Block{
-	fprintf(fp,"L_if_exit:\n");	
+    : IF Condition_if Block{ fprintf(fp,"L_if_false_%d:\n",LabelIfFalseNo); LabelIfFalseNo++; fprintf(fp,"L_if_exit_%d:\n",LabelIfExitNo); LabelIfExitNo++; }
+    | IF Condition_if Block ELSE{ fprintf(fp,"\tgoto L_if_exit_%d\n",LabelIfExitNo); fprintf(fp,"L_if_false_%d:\n",LabelIfFalseNo); LabelIfFalseNo++; } IfStmt
+    | IF Condition_if Block ELSE{ fprintf(fp,"\tgoto L_if_exit_%d\n",LabelIfExitNo); fprintf(fp,"L_if_false_%d:\n",LabelIfFalseNo); LabelIfFalseNo++; } Block{
+	fprintf(fp,"L_if_exit_%d:\n",LabelIfFalseNo); fprintf(fp,"\tgoto L_if_exit_%d\n",LabelIfExitNo);
     }
 ;
 
 
-Condition
+Condition_if
     : Expression{
 	if(strcmp($1,"bool") != 0)
 	{
 		printf("error:%d: non-bool (type %s) used as for condition\n",yylineno+1, check_type($1,scope_level));
+		HAS_ERROR = 1;
 	}
-	//fprintf(fp,"\tifeq L_for_exit\n");
+	fprintf(fp,"\tifeq L_if_false_%d\n",LabelIfFalseNo);
     }
 ;
 
 ForStmt
-    : FOR{ fprintf(fp,"L_for_begin :\n"); } For_test
+    : FOR{ fprintf(fp,"L_for_begin_%d:\n",LabelForBeginNo); } For_test
 ;
 
 For_test
-    : Condition{ fprintf(fp,"\tifeq L_for_exit\n"); } Block{ fprintf(fp,"\tgoto L_for_begin\n"); fprintf(fp,"L_for_exit:\n"); }
-    | ForClause Block
+    : Condition_for Block{ fprintf(fp,"\tgoto L_for_begin_%d\n",LabelForBeginNo); fprintf(fp,"L_for_exit_%d:\n",LabelForBeginNo); LabelForBeginNo++; }
+    | ForClause Block{ LabelForExitNo--; fprintf(fp,"\tgoto for_Post_Stmt_%d\n",LabelForExitNo); fprintf(fp,"L_for_exit_%d:\n",LabelForExitNo); }
+;
+
+Condition_for
+    : Expression{
+	if(strcmp($1,"bool") != 0)
+	{
+		printf("error:%d: non-bool (type %s) used as for condition\n",yylineno+1, check_type($1,scope_level));
+		HAS_ERROR = 1;
+	}
+	fprintf(fp,"\tifeq L_for_exit_%d\n",LabelForBeginNo);
+     }
 ;
 
 ForClause
-    : InitStmt SEMICOLON  Condition SEMICOLON PostStmt
+    : InitStmt SEMICOLON{ fprintf(fp,"L_for_condition_%d:\n",LabelForBeginNo); }  Condition_for{ fprintf(fp,"\tgoto for_Stmt_%d\n",LabelForBeginNo); fprintf(fp,"for_Post_Stmt_%d:\n",LabelForBeginNo); } SEMICOLON PostStmt
 ;
 
 InitStmt
@@ -618,14 +632,14 @@ InitStmt
 ;
 
 PostStmt
-    : SimpleStmt
+    : SimpleStmt{ fprintf(fp,"\tgoto L_for_condition_%d\n",LabelForBeginNo); fprintf(fp,"for_Stmt_%d:\n",LabelForBeginNo); LabelForBeginNo++; LabelForExitNo=LabelForBeginNo; }
 ;
 
 PrintStmt
     : PRINT LPAREN Expression RPAREN{
 	char *type_printed;
 	type_printed = check_type($3,scope_level);
-	printf("PRINT %s\n", type_printed);
+	//printf("PRINT %s\n", type_printed);
         if(strcmp(type_printed,"bool") == 0)
         {
 		int i = LabelNo;
@@ -656,14 +670,14 @@ PrintStmt
 	}
         else if(strcmp(type_printed,"bool") == 0)
         {
-                fprintf(fp,"\tinvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+                fprintf(fp,"\tinvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
         }
 
     }
     | PRINTLN LPAREN Expression RPAREN{
         char *type_printed;
         type_printed = check_type($3,scope_level);
-        printf("PRINT %s\n", type_printed);
+        //printf("PRINT %s\n", type_printed);
         if(strcmp(type_printed,"bool") == 0)
         {
 		int i = LabelNo;
@@ -790,7 +804,7 @@ static void create_symbol() {
 }
 
 static void insert_symbol(char* type ,char* name, int ScopeLevel) {
-    printf("> Insert {%s} into symbol table (scope level: %d)\n",name ,ScopeLevel);
+    //printf("> Insert {%s} into symbol table (scope level: %d)\n",name ,ScopeLevel);
     int crntID = ST[ScopeLevel]->crntID;
     ST[ScopeLevel]->Index[crntID] = crntID;
     ST[ScopeLevel]->Name[crntID] = name;
@@ -821,22 +835,25 @@ static Struct lookup_symbol(char* name, int ScopeLevel) {
 		}
    	}
    }
-   //printf("error:%d: undefined: %s\n",yylineno+1, name);
+   s.ScanPos = -1;
+   s.ScanType = "";
+   s.ScanElementType = "";
+
+   if(strcmp(name,"int32") != 0 && strcmp(name,"flaot32") != 0 && strcmp(name,"string") != 0 && strcmp(name,"bool") != 0)
+   {
+   	printf("error:%d: undefined: %s\n",yylineno, name);
+   	HAS_ERROR = 1;
+   }
+   return s;
 }
 
 
 static void load(int LoadPos,char* LoadType, char* LoadElementType)
 {
 
-        if(strcmp(LoadType,"array") == 0)
+        if(strcmp(LoadType,"int32") == 0 || strcmp(LoadType,"float32") == 0)
         {
-/*
-                if(strcmp(LoadElementType,"int32") == 0 || strcmp(LoadElementType,"float32") == 0)
-                {
-                        fprintf(fp,"\t%c",LoadElementType[0]);
-                }
-                fprintf(fp,"aload\n");
-*/
+                fprintf(fp,"\t%cload %d\n",LoadType[0],LoadPos);		
         }
 	else if(strcmp(LoadType,"string") == 0)
 	{
@@ -846,10 +863,6 @@ static void load(int LoadPos,char* LoadType, char* LoadElementType)
         {
                 fprintf(fp,"\tiload %d\n",LoadPos);
         }
-        else
-        {
-                fprintf(fp,"\t%cload %d\n",LoadType[0],LoadPos);
-        }
 
 }
 
@@ -858,6 +871,7 @@ static void store(int StorePos,char* StoreType,char* StoreElementType)
 
 	if(strcmp(StoreType,"array") == 0)
 	{
+
 		if(strcmp(StoreElementType,"int32") == 0 || strcmp(StoreElementType,"float32") == 0)
 		{
 			fprintf(fp,"\t%c",StoreElementType[0]);
@@ -880,6 +894,7 @@ static void store(int StorePos,char* StoreType,char* StoreElementType)
 }
 
 static void dump_symbol() {
+/*
     printf("> Dump symbol table (scope level: %d)\n", scope_level);
     printf("%-10s%-10s%-10s%-10s%-10s%s\n",
            "Index", "Name", "Type", "Address", "Lineno", "Element type");
@@ -889,6 +904,7 @@ static void dump_symbol() {
     	printf("%-10d%-10s%-10s%-10d%-10d%s\n",
 		ST[scope_level]->Index[i], ST[scope_level]->Name[i], ST[scope_level]->Type[i], ST[scope_level]->Address[i], ST[scope_level]->Lineno[i], ST[scope_level]->ElementType[i]);
     }
+*/
     scope_level--;
 }
 
@@ -922,6 +938,7 @@ static void insert_symbol_and_check_redeclared(char* type, char* name, int Scope
 	if(strcmp(ST[ScopeLevel]->Name[i],name) == 0)
 	{
 		printf("error:%d: %s redeclared in this block. previous declaration at line %d\n",yylineno, name, ST[ScopeLevel]->Lineno[i]);
+		HAS_ERROR = 1;
 		return;
 	}	
    }
